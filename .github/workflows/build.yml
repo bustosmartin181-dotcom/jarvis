@@ -21,9 +21,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Instalar Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Descargar el modelo de voz en español (Vosk)
         run: |
           curl -L -o modelo.zip https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip
