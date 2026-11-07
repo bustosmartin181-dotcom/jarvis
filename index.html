@@ -145,8 +145,8 @@ const chat=$('chat'), estado=$('estado'), nucleo=$('nucleo');
 function personalidad(){
   const ahora = new Date().toLocaleString('es-AR',{dateStyle:'full',timeStyle:'short'});
   return `Sos JARVIS, un asistente personal de inteligencia artificial al estilo del mayordomo digital de las películas de superhéroes: elegante, leal, muy capaz, educado y con un humor seco e ironía sutil.
-Tu usuario se llama ${cfg.nombre||'Martín'} y vive en Mendoza, Argentina. Tratalo de "señor" o por su nombre.
-Hablás en español rioplatense pero con tono formal y refinado de mayordomo (ej: "Por supuesto, señor.", "Entendido, ${cfg.nombre||'Martín'}. Ya mismo.", "Si me permite la observación, señor...").
+Tu usuario se llama ${cfg.nombre||'Martín'} y vive en Mendoza, Argentina. Llamalo siempre por su nombre, NUNCA le digas "señor".
+Hablás en español rioplatense pero con tono formal y refinado de mayordomo (ej: "Por supuesto, ${cfg.nombre||'Martín'}.", "Entendido, ${cfg.nombre||'Martín'}. Ya mismo.", "Si me permite la observación, ${cfg.nombre||'Martín'}...").
 Tus respuestas se leen en voz alta: sé breve (1 a 4 oraciones), sin listas largas, sin emojis, sin markdown ni asteriscos, salvo que te pidan algo detallado.
 Si no sabés algo o no podés hacerlo, decilo con honestidad y elegancia. No inventes datos.
 Fecha y hora actual: ${ahora}.`;
@@ -166,7 +166,7 @@ function setEstado(t, modo){
 }
 historial.forEach(m=>agregarMsg(m.role,m.text));
 if(historial.length===0){
-  agregarMsg('model', `Buenas, señor. Todos los sistemas en línea. ${cfg.clave?'¿En qué puedo ayudarlo?':'Antes de empezar, toque "Ajustes" y cargue la clave de Gemini, por favor.'}`);
+  agregarMsg('model', `Buenas, ${cfg.nombre||'Martín'}. Todos los sistemas en línea. ${cfg.clave?'¿En qué puedo ayudarlo?':'Antes de empezar, toque "Ajustes" y cargue la clave de Gemini, por favor.'}`);
 }
 
 // ===== Voz (hablar) =====
@@ -212,14 +212,18 @@ async function llamarGemini(modelo){
   return txt;
 }
 
-// Si el modelo configurado no existe, busca uno "flash" disponible automáticamente
-async function buscarModeloDisponible(){
-  const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',{headers:{'x-goog-api-key':cfg.clave}});
-  const data = await r.json();
-  const lista = (data.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
-                 .map(m=>m.name.replace('models/',''));
-  return lista.find(n=>/flash/i.test(n) && !/image|tts|live|audio|preview/i.test(n))
-      || lista.find(n=>/flash/i.test(n)) || lista[0];
+// Lista de modelos de texto disponibles para probar si uno está saturado o no existe (máx. 5)
+async function listarModelos(){
+  const base = ['gemini-flash-latest','gemini-flash-lite-latest'];
+  try{
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',{headers:{'x-goog-api-key':cfg.clave}});
+    const data = await r.json();
+    const lista = (data.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent'))
+                   .map(m=>m.name.replace('models/',''))
+                   .filter(n=>/flash/i.test(n) && !/image|tts|live|audio|embed|vision/i.test(n));
+    const estables = lista.filter(n=>!/preview|exp/i.test(n));
+    return [...new Set([...base, ...estables, ...lista])].slice(0,5);
+  }catch(e){ return base; }
 }
 
 let ocupado=false;
@@ -235,12 +239,22 @@ async function preguntar(texto){
     let resp;
     try{ resp = await llamarGemini(cfg.modelo||'gemini-flash-latest'); }
     catch(e){
-      if(e.status===404 || /not found|not supported/i.test(e.message)){
-        const alt = await buscarModeloDisponible();
-        if(!alt) throw e;
-        cfg.modelo = alt; guardar('jarvis_cfg',cfg);
-        resp = await llamarGemini(alt);
-      } else throw e;
+      const saturado = e.status===503 || e.status===500 || /high demand|overloaded|unavailable/i.test(e.message);
+      const noExiste = e.status===404 || /not found|not supported/i.test(e.message);
+      if(!saturado && !noExiste) throw e;
+      // Probar con otros modelos disponibles
+      setEstado('Buscando otro canal','pensando');
+      const lista = await listarModelos();
+      let ultimoError = e;
+      for(const alt of lista){
+        if(alt===cfg.modelo) continue;
+        try{
+          resp = await llamarGemini(alt);
+          if(noExiste){ cfg.modelo = alt; guardar('jarvis_cfg',cfg); }
+          break;
+        }catch(e2){ ultimoError = e2; if(e2.status===400||e2.status===403) throw e2; }
+      }
+      if(!resp) throw ultimoError;
     }
     historial.push({role:'model',text:resp});
     guardar('jarvis_hist', historial.slice(-60));
@@ -304,11 +318,11 @@ $('btnGuardar').onclick=()=>{
 };
 $('btnProbarVoz').onclick=()=>{
   cfg.voz=$('cfgVoz').value; cfg.vel=Number($('cfgVel').value);
-  hablar(`A su servicio, ${$('cfgNombre').value||'señor'}. Todos los sistemas funcionando.`);
+  hablar(`A su servicio, ${$('cfgNombre').value||'Martín'}. Todos los sistemas funcionando.`);
 };
 $('btnBorrar').onclick=()=>{
   historial=[]; guardar('jarvis_hist',[]); chat.innerHTML='';
-  agregarMsg('model','Memoria de la conversación borrada, señor. Empecemos de nuevo.');
+  agregarMsg('model','Memoria de la conversación borrada, '+(cfg.nombre||'Martín')+'. Empecemos de nuevo.');
   $('ajustes').classList.remove('abierto');
 };
 </script>
