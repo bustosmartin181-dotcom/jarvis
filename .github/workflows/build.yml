@@ -3,6 +3,10 @@ name: Compilar APK de JARVIS
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'pc/**'
+      - 'index.html'
+      - '.github/workflows/build-pc.yml'
   workflow_dispatch:
 
 permissions:

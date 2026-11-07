@@ -1,0 +1,46 @@
+name: Compilar JARVIS PC (Windows)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'pc/**'
+      - '.github/workflows/build-pc.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compilar-pc:
+    runs-on: windows-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar librerías
+        run: pip install -r pc/requirements.txt
+
+      - name: Probar captura de pantalla y voz
+        working-directory: pc
+        run: |
+          python -c "import jarvis_pc as j; im=j.capturar(); print('Captura OK', im.size)"
+          python -c "import pyttsx3; e=pyttsx3.init(); print('Voces:', [v.name for v in e.getProperty('voices')])"
+
+      - name: Crear JarvisPC.exe
+        working-directory: pc
+        run: pyinstaller --onefile --windowed --name JarvisPC --hidden-import pyttsx3.drivers --hidden-import pyttsx3.drivers.sapi5 --hidden-import comtypes.client jarvis_pc.py
+
+      - name: Publicar el .exe para descargar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pc-v${{ github.run_number }}
+          name: JARVIS PC v${{ github.run_number }}
+          body: "Tocá **JarvisPC.exe** para descargar. Si Windows avisa, tocá 'Más información' → 'Ejecutar de todas formas'."
+          files: pc/dist/JarvisPC.exe
+          make_latest: false
