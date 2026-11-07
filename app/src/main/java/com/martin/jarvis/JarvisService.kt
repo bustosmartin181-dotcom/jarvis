@@ -251,7 +251,11 @@ class JarvisService : Service(), RecognitionListener, TextToSpeech.OnInitListene
     private fun hablar(texto: String) {
         val t = tts
         if (!ttsListo || t == null) { volverAEsperar(); return }
-        t.setSpeechRate(Prefs(this).velocidad)
+        val pr = Prefs(this)
+        t.setSpeechRate(pr.velocidad)
+        if (pr.voz.isNotBlank()) {
+            try { t.voices?.firstOrNull { it.name == pr.voz }?.let { t.voice = it } } catch (_: Exception) {}
+        }
         val limpio = texto.replace(Regex("[*#_`>]"), "")
         t.speak(limpio, TextToSpeech.QUEUE_FLUSH, Bundle(), "resp")
     }

@@ -20,6 +20,7 @@ class Prefs(ctx: Context) {
     var memoria: String get() = sp.getString("memoria", "")!!; set(v) = sp.edit().putString("memoria", v).apply()
     var modelo: String get() = sp.getString("modelo", "gemini-flash-latest")!!; set(v) = sp.edit().putString("modelo", v).apply()
     var velocidad: Float get() = sp.getFloat("vel", 1.0f); set(v) = sp.edit().putFloat("vel", v).apply()
+    var voz: String get() = sp.getString("voz", "")!!; set(v) = sp.edit().putString("voz", v).apply()
     var historial: String get() = sp.getString("hist", "[]")!!; set(v) = sp.edit().putString("hist", v).apply()
 }
 

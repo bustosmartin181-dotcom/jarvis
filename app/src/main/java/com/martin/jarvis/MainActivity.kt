@@ -3,6 +3,8 @@ package com.martin.jarvis
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
+import android.speech.tts.TextToSpeech
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -41,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var btnActivar: Button
     private lateinit var panelAjustes: LinearLayout
     private lateinit var contenedor: ScrollView
+    private var ttsPrueba: TextToSpeech? = null
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -205,6 +208,9 @@ class MainActivity : Activity() {
         }
         panel.addView(barra)
 
+        panel.addView(etiqueta("Voz de Jarvis"))
+        panel.addView(boton("🗣  Elegir voz (probalas y elegí una de hombre)", principal = false) { elegirVoz() })
+
         panel.addView(etiqueta("Modelo de IA (dejalo así salvo que te diga otra cosa)"))
         val fModelo = campo(p.modelo, "gemini-flash-latest"); panel.addView(fModelo)
 
@@ -226,6 +232,57 @@ class MainActivity : Activity() {
             agregarLog("JARVIS: Memoria de la conversación borrada, ${p.nombre}.")
         })
         return panel
+    }
+
+    // ---------------- Elegir voz ----------------
+    private fun elegirVoz() {
+        val t = ttsPrueba
+        if (t == null) {
+            Toast.makeText(this, "Cargando voces...", Toast.LENGTH_SHORT).show()
+            ttsPrueba = TextToSpeech(this) { st ->
+                if (st == TextToSpeech.SUCCESS) runOnUiThread { mostrarVoces() }
+                else runOnUiThread { Toast.makeText(this, "No hay motor de voz", Toast.LENGTH_LONG).show() }
+            }
+        } else mostrarVoces()
+    }
+
+    private fun mostrarVoces() {
+        val t = ttsPrueba ?: return
+        val voces = try {
+            t.voices.orEmpty().filter { it.locale.language == "es" && !it.features.contains("notInstalled") }
+                .sortedWith(compareBy({ it.isNetworkConnectionRequired }, { it.locale.country }, { it.name }))
+        } catch (e: Exception) { emptyList() }
+        if (voces.isEmpty()) {
+            Toast.makeText(this, "No encontré voces en español. Instalalas en Ajustes del teléfono → Texto a voz.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val nombres = voces.mapIndexed { i, v ->
+            val pais = v.locale.displayCountry.ifBlank { "Español" }
+            "Voz ${i + 1} · $pais${if (v.isNetworkConnectionRequired) " · necesita internet" else ""}\n${v.name}"
+        }.toTypedArray()
+        var elegida = voces.indexOfFirst { it.name == p.voz }
+        AlertDialog.Builder(this)
+            .setTitle("Tocá una voz para escucharla")
+            .setSingleChoiceItems(nombres, elegida) { _, i ->
+                elegida = i
+                t.voice = voces[i]
+                t.setSpeechRate(p.velocidad); t.setPitch(0.9f)
+                t.speak("A su servicio, ${p.nombre}. Todos los sistemas funcionando.", TextToSpeech.QUEUE_FLUSH, null, "prueba")
+            }
+            .setPositiveButton("Usar esta") { _, _ ->
+                if (elegida >= 0) {
+                    p.voz = voces[elegida].name
+                    Toast.makeText(this, "Voz guardada ✔", Toast.LENGTH_SHORT).show()
+                }
+                t.stop()
+            }
+            .setNegativeButton("Cancelar") { _, _ -> t.stop() }
+            .show()
+    }
+
+    override fun onDestroy() {
+        ttsPrueba?.shutdown()
+        super.onDestroy()
     }
 
     private fun agregarLog(t: String) {
